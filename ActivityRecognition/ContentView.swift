@@ -14,6 +14,7 @@ class MotionManager: ObservableObject {
     
     @Published var activities: [CMMotionActivity] = []
     
+    
     init() {
         startMonitoring()
     }
@@ -41,37 +42,75 @@ class MotionManager: ObservableObject {
 struct ContentView: View {
     
     @ObservedObject var motionManager = MotionManager()
+    @State var sorting: Sorting = .all
+    private let formatter = DateFormatter()
     
-    func activityTypeString(activity: CMMotionActivity) -> String {
+    enum Sorting: String, CaseIterable, Equatable {
+        case all, low, medium, high
+        var localized: String { self.rawValue }
+    }
+    
+    func display(activity: CMMotionActivity) -> Bool {
+        switch activity.confidence {
+        case .low:
+            sorting == .all || sorting == .low
+        case .medium:
+            sorting == .all || sorting == .medium
+        case .high:
+            sorting == .all || sorting == .high
+        @unknown default:
+            sorting == .all
+        }
+    }
+    func activityType(activity: CMMotionActivity) -> Image {
         if activity.running {
-            return "Running"
+            return Image(systemName: "figure.run")
         } else if activity.walking {
-            return "Walking"
+            return Image(systemName: "figure.walk")
         } else if activity.automotive {
-            return "Automotive"
+            return Image(systemName: "car.side")
         } else if activity.cycling {
-            return "Cycling"
+            return Image(systemName: "figure.outdoor.cycle")
         } else if activity.stationary {
-            return "Stationary"
+            return Image(systemName: "figure.stand")
         } else {
-            return "Unknown"
+            return Image(systemName: "questionmark.circle")
         }
     }
     
+    func dateString(activity: CMMotionActivity) -> String {
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter.string(from: activity.startDate)
+    }
+    
     var body: some View {
-        VStack {
+        VStack(spacing: 8) {
+            
             
             Text("Activity recognition").font(.largeTitle)
+            
+            
             Button("Clear", role: .destructive) {
                 self.motionManager.activities.removeAll()
             }
-            List(motionManager.activities.sorted(by: { $0.startDate > $1.startDate
+            
+            HStack {
+                Text("accuracy:")
+                Picker(selection: $sorting, label: Text("")) {
+                    ForEach(Sorting.allCases, id: \.self) { sort in
+                        Text(LocalizedStringKey(sort.rawValue))
+                    }
+                }.pickerStyle(.segmented)
+            }
+            List(motionManager.activities
+                .sorted(by: { $0.startDate > $1.startDate
+            }).filter({
+                display(activity: $0)
             }), id: \.startDate) { activity in
                 HStack {
-                    VStack(alignment: .leading) {
-                        Text(activityTypeString(activity: activity))
-                        Text(activity.startDate.description).font(.footnote).foregroundColor(.gray)
-                    }
+                    activityType(activity: activity)
+                    Text(dateString(activity: activity))
                     Spacer()
                     ConfidenceView(confidence: activity.confidence)
                 }
